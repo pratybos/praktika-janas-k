@@ -2,6 +2,10 @@
 #include "rlgl.h"
 #include "raymath.h"
 
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
+
 #define TILE_SIZE 80
 #define SCREEN_WIDTH 1024
 #define SCREEN_HEIGHT 768
@@ -149,7 +153,7 @@ void AddArrows(int arr[MAX][MAX], int mode) {
         
 }
 
-void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row) {
+void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row, bool permanent) {
     // Tile pushing based on direction
     int i, j;
     switch (direction) {
@@ -163,8 +167,10 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             while (arr[row][j] == RED_LEAF || arr[row][j] == GREEN_LEAF || arr[row][j] == BRANCH)
                 j--;
 
-            if (j < col_min)
+            if (j < col_min && permanent == true) {
                 col_min--;
+                grid_origin.x -= TILE_SIZE;
+            }
 
             for (; j <= i; j++)
                 arr[row][j] = arr[row][j + 1];
@@ -181,8 +187,9 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             while (arr[row][j] == RED_LEAF || arr[row][j] == GREEN_LEAF || arr[row][j] == BRANCH)
                 j++;
 
-            if (j > col_max)
+            if (j > col_max && permanent == true) {
                 col_max++;
+            }
 
             for (; j >= i; j--)
                 arr[row][j] = arr[row][j - 1];
@@ -199,8 +206,10 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             while (arr[j][col] == RED_LEAF || arr[j][col] == GREEN_LEAF || arr[j][col]== BRANCH)
                 j--;
 
-            if (j < row_min)
+            if (j < row_min && permanent == true) {
                 row_min--;
+                grid_origin.y -= TILE_SIZE;
+            }
 
             for (; j <= i; j++)
                 arr[j][col]= arr[j + 1][col];
@@ -217,8 +226,9 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             while (arr[j][col] == RED_LEAF || arr[j][col] == GREEN_LEAF || arr[j][col]== BRANCH)
                 j++;
 
-            if (j > row_max)
+            if (j > row_max && permanent == true) {
                 row_max++;
+            }
 
             for (; j >= i; j--)
                 arr[j][col]= arr[j - 1][col];
@@ -228,36 +238,163 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
     }
 }
 
-int CheckWin(int arr[MAX][MAX]) {
-    int green_pts = 0, red_pts = 0;
+struct Score {
+    int green;
+    int red;
+};
+
+struct Score CheckScore(int arr[MAX][MAX]) {
+
+    struct Score score;
+    score.green = 0;
+    score.red = 0;
     
     for (int row = row_min; row <= row_max; row++) {
         for (int col = col_min; col <= col_max; col++) {
-            if (arr[row][col] == GREEN_LEAF) {
-                if (arr[row + 1][col] == BRANCH || 
-                    arr[row - 1][col] == BRANCH || 
-                    arr[row][col + 1] == BRANCH || 
-                    arr[row][col - 1] == BRANCH) {
-                        green_pts++;
-                    }
+            if (arr[row + 1][col] == BRANCH || 
+                arr[row - 1][col] == BRANCH || 
+                arr[row][col + 1] == BRANCH || 
+                arr[row][col - 1] == BRANCH) {
+                    if (arr[row][col] == GREEN_LEAF)
+                        score.green += 1;
+                    else if (arr[row][col] == RED_LEAF)
+                        score.red += 1;
+                }
             }
-            else if (arr[row][col] == RED_LEAF) {
-                if (arr[row + 1][col] == BRANCH || 
-                    arr[row - 1][col] == BRANCH || 
-                    arr[row][col + 1] == BRANCH || 
-                    arr[row][col - 1] == BRANCH) {
-                        red_pts++;
-                    }
+        }
+
+    return score;        
+}
+
+
+struct Moves {
+    int row;
+    int col;
+    int direction;
+    int score;
+    struct Moves* next;
+};
+struct Moves* head;
+
+struct Moves* InsertToBack(struct Moves* head, int direction, int row, int col) {
+    struct Moves* temp = (struct Moves*)malloc(sizeof(struct Moves));
+    temp->row = row;
+    temp->col = col;
+    temp->direction = direction;
+    temp->score = 0;
+    temp->next = NULL;
+    if (head == NULL)
+        head = temp;
+    else {
+        struct Moves* temp1 = head;
+        while (temp1->next != NULL)
+            temp1 = temp1->next;
+        temp1->next = temp;
+    }
+    return head;
+}
+
+struct Moves* destroy(struct Moves* head) {
+    struct Moves *current = head;
+    struct Moves *temp;
+
+    while (current != NULL) {
+        temp = current->next;
+        free(current);
+        current = temp;
+    }
+    head = NULL;
+    return head;
+}
+
+int CpuMoves(int board[MAX][MAX], int theory_board[MAX][MAX], int turn_color, struct Moves* head) { 
+    
+
+    /*
+    1. Trinamas susietas ejimu sarasas (Move)
+    2. Visi galimi ejimai surasomi i susieta sarasa
+    3. Ciklas:
+        Laikinas lentos masyvas kopijuojamas is pagrindinio masyvo board
+        Ejimas is saraso atliekamas nukopijuotame masyve
+        Skaiciuojamas tasku pokytis pries ir po ejimo
+        Issaugomas didziausias tasku pokytis i max_score
+    4. Is susieto saraso Moves trinami ejimai kuriu verte mazesne uz max_score
+    5. Is likusiu ejimu sarase pasirenkamas atsitiktinis
+    6. Pasirinktas ejimas pritaikomas pagrindiniam masyvui "board"
+    */
+
+    head = destroy(head);
+
+    for (int row = row_min - 1; row <= row_max + 1; row++) {
+        for (int col = col_min - 1; col <= col_max + 1; col++) {
+            if (board[row][col] == ARROW_LEFT || 
+                board[row][col] == ARROW_RIGHT || 
+                board[row][col] == ARROW_UP || 
+                board[row][col] == ARROW_DOWN ) {
+                    head = InsertToBack(head, board[row][col], row, col);
             }
         }
     }
-    if (green_pts > red_pts)
-        return GREEN_LEAF;
-    else if (red_pts > green_pts)
-        return RED_LEAF;
-    else
-        return 3;
-        
+
+
+
+    struct Moves* current = head, *result, *prev;
+    struct Score score_after;
+
+    int max_score = 0;
+    while (current != NULL) {
+        memcpy(theory_board, board, sizeof(board[0][0]) * MAX * MAX); 
+        GameMove(theory_board, turn_color, current->direction, current->col, current->row, false);
+        score_after = CheckScore(theory_board);
+        if (turn_color == RED_LEAF)
+            current->score = score_after.red - score_after.green;
+        else
+            current->score = score_after.green - score_after.red;
+            
+        if (current->score > max_score)
+            max_score = current->score;
+
+        current = current->next;
+    }
+
+    current = head;
+    prev = head;
+    while (current != NULL) {
+        if (current->score < max_score) {
+            if (current == head) {
+                head = current->next;
+                free(current);
+                current = head;
+                prev = head;
+            }
+            else {
+                prev->next = current->next;  // (n+1)th Node
+                free(current);
+                current = prev->next;
+            }
+        }
+        else {
+            prev = current;
+            current = current->next;
+        }
+    }    
+    
+    
+    srand(time(NULL));
+    current = head;
+    result = head;
+
+    for (int n = 2; current != NULL; n++) {
+        // change result with probability 1/n
+        if (rand() % n == 0)
+           result = current;
+
+        current = current->next;
+    }
+
+    GameMove(board, turn_color, result->direction, result->col, result->row, true);
+
+    return result->direction;
 }
 
 int main(void) {
@@ -265,6 +402,7 @@ int main(void) {
     InitBoard(board, 1);
     AddArrows(board, ARROWS_ALL);
 
+    // SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Leaves");
 
     Camera2D camera = { 0 };
@@ -299,57 +437,43 @@ int main(void) {
 
     int selected_col = 0, selected_row = 0;
     int turn_color = GREEN_LEAF;
-    int turn_stage = 1;
+    int turn_stage = 1; // How many tiles left to place in a turn
     int turns_remaining[3] = {0, TURNS_PER_PLAYER, TURNS_PER_PLAYER};
     bool game_finished = false;
-    int winner = 0;
+    struct Score score;
+    int cpu_direction = 0;
+
+    int theory_board[MAX][MAX];
+
 
 
     while (!WindowShouldClose()) {
 
+        // RESET BOARD
         if (IsKeyPressed(KEY_ONE)) {
             InitBoard(board, 1);
-            AddArrows(board, ARROWS_ALL);
-
-            turn_color = GREEN_LEAF;
-            turn_stage = 1;
-            turns_remaining[GREEN_LEAF] = TURNS_PER_PLAYER;
-            turns_remaining[RED_LEAF] = TURNS_PER_PLAYER;
-            game_finished = false;
-            winner = 0;
         }
         if (IsKeyPressed(KEY_TWO)) {
             InitBoard(board, 2);
-            AddArrows(board, ARROWS_ALL);
-
-            turn_color = GREEN_LEAF;
-            turn_stage = 1;
-            turns_remaining[GREEN_LEAF] = TURNS_PER_PLAYER;
-            turns_remaining[RED_LEAF] = TURNS_PER_PLAYER;
-            game_finished = false;
-            winner = 0;
         }
         if (IsKeyPressed(KEY_THREE)) {
             InitBoard(board, 3);
-            AddArrows(board, ARROWS_ALL);
-
-            turn_color = GREEN_LEAF;
-            turn_stage = 1;
-            turns_remaining[GREEN_LEAF] = TURNS_PER_PLAYER;
-            turns_remaining[RED_LEAF] = TURNS_PER_PLAYER;
-            game_finished = false;
-            winner = 0;
         }
         if (IsKeyPressed(KEY_FOUR)) {
             InitBoard(board, 4);
-            AddArrows(board, ARROWS_ALL);
+        }
 
+        if (IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_TWO) || 
+            IsKeyPressed(KEY_THREE) || IsKeyPressed(KEY_FOUR)) {
+
+            AddArrows(board, ARROWS_ALL);
             turn_color = GREEN_LEAF;
             turn_stage = 1;
             turns_remaining[GREEN_LEAF] = TURNS_PER_PLAYER;
             turns_remaining[RED_LEAF] = TURNS_PER_PLAYER;
             game_finished = false;
-            winner = 0;
+            score.green = 0;
+            score.red = 0;
         }
 
         // Zoom and mouse movement
@@ -366,7 +490,7 @@ int main(void) {
             camera.target = mouseWorldPos;
             float scaleFactor = 1.0f + (0.25f*fabsf(wheel));
             if (wheel < 0) scaleFactor = 1.0f/scaleFactor;
-            camera.zoom = Clamp(camera.zoom*scaleFactor, 0.125f, 64.0f);
+            camera.zoom = Clamp(camera.zoom*scaleFactor, 0.3f, 3.0f);
         }
 
         //----------------------------------------------------------------------------------
@@ -410,40 +534,78 @@ int main(void) {
                     posX = grid_origin.x;
                 }
 
-                mouse = GetScreenToWorld2D(GetMousePosition(), camera);
-                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !game_finished) {
-                    selected_col = (mouse.x - grid_origin.x) / TILE_SIZE + col_min - 1;
-                    selected_row = (mouse.y - grid_origin.y) / TILE_SIZE + row_min - 1;                    
+                ////////////////
+                ////// CPU MOVES
+                ////////////////
 
-                    switch (board[selected_row][selected_col]) {
+                if (turn_color == RED_LEAF) {
+                    cpu_direction = CpuMoves(board, theory_board, turn_color, head);
+
+                    switch (cpu_direction) {
                         case ARROW_LEFT:
-                            GameMove(board, turn_color, ARROW_LEFT, selected_col, selected_row);
                             AddArrows(board, ARROW_UP);
-                            turn_stage--;
-                            turns_remaining[turn_color]--;
                             break;                            
                         case ARROW_RIGHT:
-                            GameMove(board, turn_color, ARROW_RIGHT, selected_col, selected_row);
                             AddArrows(board, ARROW_DOWN);
-                            turn_stage--;
-                            turns_remaining[turn_color]--;
                             break;                        
                         case ARROW_UP:
-                            GameMove(board, turn_color, ARROW_UP, selected_col, selected_row);
                             AddArrows(board, ARROW_RIGHT);
-                            turn_stage--;
-                            turns_remaining[turn_color]--;
                             break;                        
                         case ARROW_DOWN:
-                            GameMove(board, turn_color, ARROW_DOWN, selected_col, selected_row);
                             AddArrows(board, ARROW_LEFT);
-                            turn_stage--;
-                            turns_remaining[turn_color]--;
                             break;
                     }
 
-                    
+                    turn_stage--;
+                    turns_remaining[turn_color]--;
+                    score = CheckScore(board);
 
+                    if (turn_color == RED_LEAF && turn_stage == 0 && turns_remaining[RED_LEAF] > 0) {
+                        turn_color = GREEN_LEAF;
+                        turn_stage = 2;
+                        AddArrows(board, ARROWS_ALL);
+                    }
+                    else if (turn_color == RED_LEAF && turns_remaining[RED_LEAF] == 0) {
+                        turn_color = GREEN_LEAF;
+                        turn_stage = 1;
+                        AddArrows(board, ARROWS_ALL);
+                    }
+                }
+
+                mouse = GetScreenToWorld2D(GetMousePosition(), camera);
+                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !game_finished) {
+                    selected_col = (mouse.x - grid_origin.x) / TILE_SIZE + col_min - 1;
+                    selected_row = (mouse.y - grid_origin.y) / TILE_SIZE + row_min - 1;  
+
+                    int selected_square = board[selected_row][selected_col];
+
+                    switch (selected_square) {
+                        case ARROW_LEFT:
+                            GameMove(board, turn_color, ARROW_LEFT, selected_col, selected_row, true);
+                            AddArrows(board, ARROW_UP);
+                            break;                            
+                        case ARROW_RIGHT:
+                            GameMove(board, turn_color, ARROW_RIGHT, selected_col, selected_row, true);
+                            AddArrows(board, ARROW_DOWN);
+                            break;                        
+                        case ARROW_UP:
+                            GameMove(board, turn_color, ARROW_UP, selected_col, selected_row, true);
+                            AddArrows(board, ARROW_RIGHT);
+                            break;                        
+                        case ARROW_DOWN:
+                            GameMove(board, turn_color, ARROW_DOWN, selected_col, selected_row, true);
+                            AddArrows(board, ARROW_LEFT);
+                            break;
+                    }
+
+                    if (selected_square == ARROW_LEFT || selected_square == ARROW_RIGHT || 
+                        selected_square == ARROW_UP || selected_square == ARROW_DOWN) {
+                            
+                        turn_stage--;
+                        turns_remaining[turn_color]--;
+                        score = CheckScore(board);
+                    }
+                    
                     if (turn_color == GREEN_LEAF && turn_stage == 0 && turns_remaining[GREEN_LEAF] > 0) {
                         turn_color = RED_LEAF;
                         turn_stage = 2;
@@ -462,35 +624,24 @@ int main(void) {
                     if (turns_remaining[GREEN_LEAF] <= 0 && turns_remaining[RED_LEAF] <= 0) {
                         game_finished = true;
                         AddArrows(board, ARROWS_NONE);
-                        winner = CheckWin(board);
-                        
-                        DrawText(
-                        TextFormat("%d, %d", grid_origin.x, row_max - row_min + 1 ),
-                        0,
-                        0,
-                        20, YELLOW);
                     }
-
                 }
 
-                switch (winner) {
-                    case GREEN_LEAF:
-                        DrawText(
-                        TextFormat("ZALIAS LAIMI"), 200, 150, 40, GREEN);
-                        break;
-
-                    case RED_LEAF:
-                        DrawText(
-                        TextFormat("RAUDONAS LAIMI"), 200, 150, 40, RED);
-                        break;
-
-                    case 3:
-                        DrawText(
-                        TextFormat("LYGIOSIOS" ), 200, 150, 40, YELLOW);
-                        break;
-                    }
-
             EndMode2D();
+
+            if (game_finished) {
+
+                    if (score.green > score.red)
+                        DrawText(TextFormat("ZALIAS LAIMI"), 20, 20, 40, GREEN);
+                    else if (score.green < score.red)
+                        DrawText(TextFormat("RAUDONAS LAIMI"), 20, 20, 40, RED);
+                    else
+                        DrawText(TextFormat("LYGIOSIOS"), 20, 20, 40, YELLOW);
+
+                    DrawText(TextFormat("   %d", score.green), 20, 60, 50, GREEN);
+                    DrawText(TextFormat("     -"), 20, 60, 50, WHITE);
+                    DrawText(TextFormat("       %d", score.red), 20, 60, 50, RED);
+            }
 
         EndDrawing();
     }
