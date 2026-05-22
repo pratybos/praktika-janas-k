@@ -31,6 +31,14 @@
 int col_min, col_max, row_min, row_max;
 Vector2 grid_origin;
 
+struct Player {
+    int color;
+    int turns_remaining;
+    int moves_remaining;
+    bool clockwise_turn;
+    bool CPU_controlled;
+};
+
 void InitBoard(int arr[MAX][MAX], int type) {
 
     for (int row = 0; row < MAX; row++) {
@@ -189,6 +197,7 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
 
             if (j > col_max && permanent == true) {
                 col_max++;
+                // grid_origin.x += TILE_SIZE;
             }
 
             for (; j >= i; j--)
@@ -228,6 +237,7 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
 
             if (j > row_max && permanent == true) {
                 row_max++;
+                // grid_origin.y += TILE_SIZE;
             }
 
             for (; j >= i; j--)
@@ -436,15 +446,19 @@ int main(void) {
     Vector2 mouse = { 0, 0 };
 
     int selected_col = 0, selected_row = 0;
-    int turn_color = GREEN_LEAF;
-    int turn_stage = 1; // How many tiles left to place in a turn
-    int turns_remaining[3] = {0, TURNS_PER_PLAYER, TURNS_PER_PLAYER};
     bool game_finished = false;
     struct Score score;
     int cpu_direction = 0;
 
     int theory_board[MAX][MAX];
 
+    struct Player player[2] = {
+        {GREEN_LEAF, TURNS_PER_PLAYER, 1, false, false}, 
+        {RED_LEAF, TURNS_PER_PLAYER, 0, false, true}
+    };
+
+    int player_num = 0;
+    bool move_made = false;
 
 
     while (!WindowShouldClose()) {
@@ -467,10 +481,10 @@ int main(void) {
             IsKeyPressed(KEY_THREE) || IsKeyPressed(KEY_FOUR)) {
 
             AddArrows(board, ARROWS_ALL);
-            turn_color = GREEN_LEAF;
-            turn_stage = 1;
-            turns_remaining[GREEN_LEAF] = TURNS_PER_PLAYER;
-            turns_remaining[RED_LEAF] = TURNS_PER_PLAYER;
+            player[0].moves_remaining = 1;
+            player[1].moves_remaining = 0;
+            player[0].turns_remaining = TURNS_PER_PLAYER;
+            player[1].turns_remaining = TURNS_PER_PLAYER;
             game_finished = false;
             score.green = 0;
             score.red = 0;
@@ -516,16 +530,16 @@ int main(void) {
                                 DrawTexture(branch_texture, posX, posY, WHITE);
                                 break;
                             case ARROW_UP:
-                                DrawTexture(arrow_up_texture, posX, posY, turn_color == GREEN_LEAF ? GREEN : RED);
+                                DrawTexture(arrow_up_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
                                 break;
                             case ARROW_DOWN:
-                                DrawTexture(arrow_down_texture, posX, posY, turn_color == GREEN_LEAF ? GREEN : RED);
+                                DrawTexture(arrow_down_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
                                 break;    
                             case ARROW_LEFT:
-                                DrawTexture(arrow_left_texture, posX, posY, turn_color == GREEN_LEAF ? GREEN : RED);
+                                DrawTexture(arrow_left_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
                                 break;  
                             case ARROW_RIGHT:
-                                DrawTexture(arrow_right_texture, posX, posY, turn_color == GREEN_LEAF ? GREEN : RED);
+                                DrawTexture(arrow_right_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
                                 break;                  
                         }
                         posX += TILE_SIZE;
@@ -534,12 +548,9 @@ int main(void) {
                     posX = grid_origin.x;
                 }
 
-                ////////////////
-                ////// CPU MOVES
-                ////////////////
 
-                if (turn_color == RED_LEAF) {
-                    cpu_direction = CpuMoves(board, theory_board, turn_color, head);
+                if (player[player_num].CPU_controlled && game_finished == false) {
+                    cpu_direction = CpuMoves(board, theory_board, player[player_num].color, head);
 
                     switch (cpu_direction) {
                         case ARROW_LEFT:
@@ -556,20 +567,7 @@ int main(void) {
                             break;
                     }
 
-                    turn_stage--;
-                    turns_remaining[turn_color]--;
-                    score = CheckScore(board);
-
-                    if (turn_color == RED_LEAF && turn_stage == 0 && turns_remaining[RED_LEAF] > 0) {
-                        turn_color = GREEN_LEAF;
-                        turn_stage = 2;
-                        AddArrows(board, ARROWS_ALL);
-                    }
-                    else if (turn_color == RED_LEAF && turns_remaining[RED_LEAF] == 0) {
-                        turn_color = GREEN_LEAF;
-                        turn_stage = 1;
-                        AddArrows(board, ARROWS_ALL);
-                    }
+                    move_made = true;                    
                 }
 
                 mouse = GetScreenToWorld2D(GetMousePosition(), camera);
@@ -581,50 +579,55 @@ int main(void) {
 
                     switch (selected_square) {
                         case ARROW_LEFT:
-                            GameMove(board, turn_color, ARROW_LEFT, selected_col, selected_row, true);
+                            GameMove(board, player[player_num].color, ARROW_LEFT, selected_col, selected_row, true);
                             AddArrows(board, ARROW_UP);
                             break;                            
                         case ARROW_RIGHT:
-                            GameMove(board, turn_color, ARROW_RIGHT, selected_col, selected_row, true);
+                            GameMove(board, player[player_num].color, ARROW_RIGHT, selected_col, selected_row, true);
                             AddArrows(board, ARROW_DOWN);
                             break;                        
                         case ARROW_UP:
-                            GameMove(board, turn_color, ARROW_UP, selected_col, selected_row, true);
+                            GameMove(board, player[player_num].color, ARROW_UP, selected_col, selected_row, true);
                             AddArrows(board, ARROW_RIGHT);
                             break;                        
                         case ARROW_DOWN:
-                            GameMove(board, turn_color, ARROW_DOWN, selected_col, selected_row, true);
+                            GameMove(board, player[player_num].color, ARROW_DOWN, selected_col, selected_row, true);
                             AddArrows(board, ARROW_LEFT);
                             break;
                     }
 
                     if (selected_square == ARROW_LEFT || selected_square == ARROW_RIGHT || 
                         selected_square == ARROW_UP || selected_square == ARROW_DOWN) {
-                            
-                        turn_stage--;
-                        turns_remaining[turn_color]--;
-                        score = CheckScore(board);
+
+                        move_made = true;
+                    }
+                }
+                
+
+                if (move_made) {
+                    player[player_num].moves_remaining--;
+                    player[player_num].turns_remaining--;
+                    score = CheckScore(board);
+
+                    if (player[player_num].turns_remaining > 0 && player[player_num].moves_remaining == 0) {
+                        player_num = (player_num + 1) % (sizeof(player) / sizeof(player[0]));
+                        player[player_num].moves_remaining = 2;
+                        AddArrows(board, ARROWS_ALL);
                     }
                     
-                    if (turn_color == GREEN_LEAF && turn_stage == 0 && turns_remaining[GREEN_LEAF] > 0) {
-                        turn_color = RED_LEAF;
-                        turn_stage = 2;
-                        AddArrows(board, ARROWS_ALL);
+                    if (player[player_num].turns_remaining == 0) {
+                        if (player[player_num].color == RED_LEAF) {
+                            player_num = 0;
+                            player[player_num].moves_remaining = 1;
+                            AddArrows(board, ARROWS_ALL);
+                        }
+                        else {
+                            game_finished = true;
+                            AddArrows(board, ARROWS_NONE);
+                        }
                     }
-                    else if (turn_color == RED_LEAF && turn_stage == 0 && turns_remaining[RED_LEAF] > 0) {
-                        turn_color = GREEN_LEAF;
-                        turn_stage = 2;
-                        AddArrows(board, ARROWS_ALL);
-                    }
-                    else if (turn_color == RED_LEAF && turns_remaining[RED_LEAF] == 0) {
-                        turn_color = GREEN_LEAF;
-                        turn_stage = 1;
-                        AddArrows(board, ARROWS_ALL);
-                    }
-                    if (turns_remaining[GREEN_LEAF] <= 0 && turns_remaining[RED_LEAF] <= 0) {
-                        game_finished = true;
-                        AddArrows(board, ARROWS_NONE);
-                    }
+
+                    move_made = false;
                 }
 
             EndMode2D();
