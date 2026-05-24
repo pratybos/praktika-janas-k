@@ -3,7 +3,6 @@
 #include "raymath.h"
 
 #include <string.h>
-#include <stdlib.h>
 #include <time.h>
 
 #define TILE_SIZE 80
@@ -28,45 +27,50 @@
 #define MAX 90
 #define CENTER (MAX / 2)
 
-int col_min, col_max, row_min, row_max;
-Vector2 grid_origin;
+struct Board_Bounds {
+    int row_min;
+    int row_max;
+    int col_min;
+    int col_max;
+    Vector2 grid_origin;
+};
 
 struct Player {
     int color;
     int turns_remaining;
     int moves_remaining;
-    bool clockwise_turn;
-    bool CPU_controlled;
+    enum CpuControlled {PLAYER, CPU_EASY, CPU_MEDIUM} cpu_controlled;
 };
 
-void InitBoard(int arr[MAX][MAX], int type) {
+struct Board_Bounds InitBoard(int arr[MAX][MAX], int type) {
+    struct Board_Bounds bounds;
 
     for (int row = 0; row < MAX; row++) {
         for (int col = 0; col < MAX; col++) {
             arr[row][col] = 0;
         }
     }
-    row_min = row_max = col_min = col_max = CENTER;
+    bounds.row_min = bounds.row_max = bounds.col_min = bounds.col_max = CENTER;
 
     switch (type) {
         case 1:
             // Vertical line start
-            row_min = CENTER - BRANCH_AMOUNT / 2;
-            row_max = CENTER + BRANCH_AMOUNT / 2;
-            col_min = col_max = CENTER;  
+            bounds.row_min = CENTER - BRANCH_AMOUNT / 2;
+            bounds.row_max = CENTER + BRANCH_AMOUNT / 2;
+            bounds.col_min = bounds.col_max = CENTER;  
 
-            for (int i = row_min; i <= row_max; i++) {
+            for (int i = bounds.row_min; i <= bounds.row_max; i++) {
                 arr[i][CENTER] = BRANCH;
             }
             break;
 
         case 2:
             // Horizontal start
-            col_min = CENTER - BRANCH_AMOUNT / 2;
-            col_max = CENTER + BRANCH_AMOUNT / 2;
-            row_min = row_max = CENTER;  
+            bounds.col_min = CENTER - BRANCH_AMOUNT / 2;
+            bounds.col_max = CENTER + BRANCH_AMOUNT / 2;
+            bounds.row_min = bounds.row_max = CENTER;  
 
-            for (int i = col_min; i <= col_max; i++) {
+            for (int i = bounds.col_min; i <= bounds.col_max; i++) {
                 arr[CENTER][i] = BRANCH;
             }
             break;
@@ -77,20 +81,20 @@ void InitBoard(int arr[MAX][MAX], int type) {
             for (int i = 1; i < BRANCH_AMOUNT; i++) {
                 switch (i % 4) {
                     case 1:         // Left
-                        col_min--;
-                        arr[CENTER][col_min] = BRANCH;
+                        bounds.col_min--;
+                        arr[CENTER][bounds.col_min] = BRANCH;
                         break;
                     case 2:         // UP
-                        row_min--;
-                        arr[row_min][CENTER] = BRANCH;
+                        bounds.row_min--;
+                        arr[bounds.row_min][CENTER] = BRANCH;
                         break;
                     case 3:         // RIGHT
-                        col_max++;
-                        arr[CENTER][col_max] = BRANCH;
+                        bounds.col_max++;
+                        arr[CENTER][bounds.col_max] = BRANCH;
                         break;
                     case 0:         // DOWN
-                        row_max++;
-                        arr[row_max][CENTER] = BRANCH;
+                        bounds.row_max++;
+                        arr[bounds.row_max][CENTER] = BRANCH;
                         break;
                 }
             }
@@ -102,38 +106,38 @@ void InitBoard(int arr[MAX][MAX], int type) {
             for (int i = 1; i < BRANCH_AMOUNT; i++) {
                 switch (i % 4) {
                     case 1:         // Left
-                        col_min--;
-                        arr[row_min][col_min] = BRANCH;
+                        bounds.col_min--;
+                        arr[bounds.row_min][bounds.col_min] = BRANCH;
                         break;
                     case 2:         // Right
-                        col_max++;
-                        arr[row_min][col_max] = BRANCH;
+                        bounds.col_max++;
+                        arr[bounds.row_min][bounds.col_max] = BRANCH;
                         break;
                     case 3:         // LEFT-UP
-                        row_min--;
-                        arr[row_min][col_min] = BRANCH;
+                        bounds.row_min--;
+                        arr[bounds.row_min][bounds.col_min] = BRANCH;
                         break;
                     case 0:         // RIGHT-UP
-                        arr[row_min][col_max] = BRANCH;
+                        arr[bounds.row_min][bounds.col_max] = BRANCH;
                         break;
                 }
             }
             break;
     }
 
-    int grid_width = (col_max - col_min + 3) * TILE_SIZE;
-    int grid_height = (row_max - row_min + 3) * TILE_SIZE; 
-    grid_origin = (Vector2) {
-        (SCREEN_WIDTH - grid_width) / 2,
-        (SCREEN_HEIGHT - grid_height) / 2
-    };
+    int grid_width = (bounds.col_max - bounds.col_min + 3) * TILE_SIZE;
+    int grid_height = (bounds.row_max - bounds.row_min + 3) * TILE_SIZE; 
+    bounds.grid_origin.x = (SCREEN_WIDTH - grid_width) / 2;
+    bounds.grid_origin.y = (SCREEN_HEIGHT - grid_height) / 2;
+
+    return bounds;
 }
 
-void AddArrows(int arr[MAX][MAX], int mode) {
+void AddArrows(int arr[MAX][MAX], struct Board_Bounds bounds, int mode) {
 
         // Clear arrows
-        for (int row = row_min - 1; row <= row_max + 1; row++)
-            for (int col = col_min - 1; col <= col_max + 1; col++) 
+        for (int row = bounds.row_min - 1; row <= bounds.row_max + 1; row++)
+            for (int col = bounds.col_min - 1; col <= bounds.col_max + 1; col++) 
                 if (arr[row][col] == ARROW_LEFT || 
                     arr[row][col] == ARROW_RIGHT || 
                     arr[row][col] == ARROW_UP || 
@@ -143,31 +147,28 @@ void AddArrows(int arr[MAX][MAX], int mode) {
         if (mode == ARROWS_NONE)
             return;
 
-        if (mode == ARROW_DOWN || mode == ARROWS_ALL)
-            for (int i = col_min; i <= col_max; i++)
-                arr[row_min - 1][i] = ARROW_DOWN;
-        
-        if (mode == ARROW_UP || mode == ARROWS_ALL)
-            for (int i = col_min; i <= col_max; i++)
-                arr[row_max + 1][i] = ARROW_UP;
+        for (int i = bounds.col_min; i <= bounds.col_max; i++) {
+            if (mode == ARROW_DOWN || mode == ARROWS_ALL)
+                arr[bounds.row_min - 1][i] = ARROW_DOWN; 
+            if (mode == ARROW_UP || mode == ARROWS_ALL)
+                arr[bounds.row_max + 1][i] = ARROW_UP;
+        }
 
-        if (mode == ARROW_RIGHT || mode == ARROWS_ALL)
-            for (int i = row_min; i <= row_max; i++)
-                arr[i][col_min - 1] = ARROW_RIGHT;
-
-        if (mode == ARROW_LEFT || mode == ARROWS_ALL)
-            for (int i = row_min; i <= row_max; i++)
-                arr[i][col_max + 1] = ARROW_LEFT;
-        
+        for (int i = bounds.row_min; i <= bounds.row_max; i++) {
+            if (mode == ARROW_LEFT || mode == ARROWS_ALL) 
+                arr[i][bounds.col_max + 1] = ARROW_LEFT;
+            if (mode == ARROW_RIGHT || mode == ARROWS_ALL)
+                arr[i][bounds.col_min - 1] = ARROW_RIGHT;
+        }        
 }
 
-void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row, bool permanent) {
+struct Board_Bounds GameMove(int arr[MAX][MAX], struct Board_Bounds bounds, int turn_color, int direction, int col, int row) {
     // Tile pushing based on direction
     int i, j;
     switch (direction) {
 
         case ARROW_LEFT:
-            i = col_max;
+            i = bounds.col_max;
             while (arr[row][i] == EMPTY_SPACE || arr[row][i] > 3)
                 i--;
 
@@ -175,9 +176,9 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             while (arr[row][j] == RED_LEAF || arr[row][j] == GREEN_LEAF || arr[row][j] == BRANCH)
                 j--;
 
-            if (j < col_min && permanent == true) {
-                col_min--;
-                grid_origin.x -= TILE_SIZE;
+            if (j < bounds.col_min) {
+                bounds.col_min--;
+                bounds.grid_origin.x -= TILE_SIZE;
             }
 
             for (; j <= i; j++)
@@ -187,7 +188,7 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             break;
 
         case ARROW_RIGHT:
-            i = col_min;
+            i = bounds.col_min;
             while (arr[row][i] == EMPTY_SPACE || arr[row][i] > 3)
                 i++;
 
@@ -195,9 +196,8 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             while (arr[row][j] == RED_LEAF || arr[row][j] == GREEN_LEAF || arr[row][j] == BRANCH)
                 j++;
 
-            if (j > col_max && permanent == true) {
-                col_max++;
-                // grid_origin.x += TILE_SIZE;
+            if (j > bounds.col_max) {
+                bounds.col_max++;
             }
 
             for (; j >= i; j--)
@@ -207,7 +207,7 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             break;
             
         case ARROW_UP:
-            i = row_max;
+            i = bounds.row_max;
             while (arr[i][col] == EMPTY_SPACE || arr[i][col] > 3)
                 i--;
 
@@ -215,9 +215,9 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             while (arr[j][col] == RED_LEAF || arr[j][col] == GREEN_LEAF || arr[j][col]== BRANCH)
                 j--;
 
-            if (j < row_min && permanent == true) {
-                row_min--;
-                grid_origin.y -= TILE_SIZE;
+            if (j < bounds.row_min) {
+                bounds.row_min--;
+                bounds.grid_origin.y -= TILE_SIZE;
             }
 
             for (; j <= i; j++)
@@ -227,7 +227,7 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             break;
 
         case ARROW_DOWN:
-            i = row_min;
+            i = bounds.row_min;
             while (arr[i][col] == EMPTY_SPACE || arr[i][col] > 3)
                 i++;
 
@@ -235,9 +235,8 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             while (arr[j][col] == RED_LEAF || arr[j][col] == GREEN_LEAF || arr[j][col]== BRANCH)
                 j++;
 
-            if (j > row_max && permanent == true) {
-                row_max++;
-                // grid_origin.y += TILE_SIZE;
+            if (j > bounds.row_max) {
+                bounds.row_max++;
             }
 
             for (; j >= i; j--)
@@ -246,6 +245,8 @@ void GameMove(int arr[MAX][MAX], int turn_color, int direction, int col, int row
             arr[i][col] = turn_color;
             break;
     }
+
+    return bounds;
 }
 
 struct Score {
@@ -253,14 +254,14 @@ struct Score {
     int red;
 };
 
-struct Score CheckScore(int arr[MAX][MAX]) {
+struct Score CheckScore(int arr[MAX][MAX], struct Board_Bounds bounds) {
 
     struct Score score;
     score.green = 0;
     score.red = 0;
     
-    for (int row = row_min; row <= row_max; row++) {
-        for (int col = col_min; col <= col_max; col++) {
+    for (int row = bounds.row_min; row <= bounds.row_max; row++) {
+        for (int col = bounds.col_min; col <= bounds.col_max; col++) {
             if (arr[row + 1][col] == BRANCH || 
                 arr[row - 1][col] == BRANCH || 
                 arr[row][col + 1] == BRANCH || 
@@ -286,8 +287,14 @@ struct Moves {
 };
 struct Moves* head;
 
+struct Final_Move {
+    int row;
+    int col;
+    int direction;
+};
+
 struct Moves* InsertToBack(struct Moves* head, int direction, int row, int col) {
-    struct Moves* temp = (struct Moves*)malloc(sizeof(struct Moves));
+    struct Moves* temp = (struct Moves*)MemAlloc(sizeof(struct Moves));
     temp->row = row;
     temp->col = col;
     temp->direction = direction;
@@ -310,18 +317,15 @@ struct Moves* destroy(struct Moves* head) {
 
     while (current != NULL) {
         temp = current->next;
-        free(current);
+        MemFree(current);
         current = temp;
     }
-    head = NULL;
-    return head;
+    return NULL;
 }
 
-int CpuMoves(int board[MAX][MAX], int theory_board[MAX][MAX], int turn_color, struct Moves* head) { 
-    
-
+struct Final_Move CpuMoves(int board[MAX][MAX], struct Board_Bounds bounds, int theory_board[MAX][MAX], int turn_color, struct Moves* head, int cpu_difficulty) { 
     /*
-    1. Trinamas susietas ejimu sarasas (Move)
+    1. Trinamas susietas ejimu sarasas (Moves)
     2. Visi galimi ejimai surasomi i susieta sarasa
     3. Ciklas:
         Laikinas lentos masyvas kopijuojamas is pagrindinio masyvo board
@@ -335,27 +339,29 @@ int CpuMoves(int board[MAX][MAX], int theory_board[MAX][MAX], int turn_color, st
 
     head = destroy(head);
 
-    for (int row = row_min - 1; row <= row_max + 1; row++) {
-        for (int col = col_min - 1; col <= col_max + 1; col++) {
+    struct Board_Bounds theory_bounds = bounds;
+
+    int list_length = 0;
+    for (int row = theory_bounds.row_min - 1; row <= theory_bounds.row_max + 1; row++) {
+        for (int col = theory_bounds.col_min - 1; col <= theory_bounds.col_max + 1; col++) {
             if (board[row][col] == ARROW_LEFT || 
                 board[row][col] == ARROW_RIGHT || 
                 board[row][col] == ARROW_UP || 
                 board[row][col] == ARROW_DOWN ) {
                     head = InsertToBack(head, board[row][col], row, col);
+                    list_length++;
             }
         }
     }
-
-
-
-    struct Moves* current = head, *result, *prev;
+    
+    struct Moves* current = head, *prev;
     struct Score score_after;
-
-    int max_score = 0;
+    
+    int max_score = -TILES_PER_PLAYER;
     while (current != NULL) {
         memcpy(theory_board, board, sizeof(board[0][0]) * MAX * MAX); 
-        GameMove(theory_board, turn_color, current->direction, current->col, current->row, false);
-        score_after = CheckScore(theory_board);
+        GameMove(theory_board, theory_bounds, turn_color, current->direction, current->col, current->row);
+        score_after = CheckScore(theory_board, theory_bounds);
         if (turn_color == RED_LEAF)
             current->score = score_after.red - score_after.green;
         else
@@ -365,7 +371,11 @@ int CpuMoves(int board[MAX][MAX], int theory_board[MAX][MAX], int turn_color, st
             max_score = current->score;
 
         current = current->next;
+        theory_bounds = bounds;
     }
+
+    if (cpu_difficulty == 1)
+        max_score -= 2;
 
     current = head;
     prev = head;
@@ -373,14 +383,16 @@ int CpuMoves(int board[MAX][MAX], int theory_board[MAX][MAX], int turn_color, st
         if (current->score < max_score) {
             if (current == head) {
                 head = current->next;
-                free(current);
+                MemFree(current);
                 current = head;
                 prev = head;
+                list_length--;
             }
             else {
-                prev->next = current->next;  // (n+1)th Node
-                free(current);
+                prev->next = current->next;
+                MemFree(current);
                 current = prev->next;
+                list_length--;
             }
         }
         else {
@@ -388,29 +400,28 @@ int CpuMoves(int board[MAX][MAX], int theory_board[MAX][MAX], int turn_color, st
             current = current->next;
         }
     }    
+     
+    SetRandomSeed(time(NULL));
+    int random_move = GetRandomValue(1, list_length);
     
-    
-    srand(time(NULL));
     current = head;
-    result = head;
-
-    for (int n = 2; current != NULL; n++) {
-        // change result with probability 1/n
-        if (rand() % n == 0)
-           result = current;
-
+    for (int n = 1; n < random_move; n++)
         current = current->next;
-    }
 
-    GameMove(board, turn_color, result->direction, result->col, result->row, true);
+    struct Final_Move result;
+    result.row = current->row;
+    result.col = current->col;
+    result.direction = current->direction;
 
-    return result->direction;
+    return result;
 }
 
 int main(void) {
-    int board[MAX][MAX];    
-    InitBoard(board, 1);
-    AddArrows(board, ARROWS_ALL);
+    int board[MAX][MAX];       
+    
+    struct Board_Bounds bounds;
+    bounds = InitBoard(board, 1);
+    AddArrows(board, bounds, ARROWS_ALL);
 
     // SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Leaves");
@@ -447,40 +458,38 @@ int main(void) {
 
     int selected_col = 0, selected_row = 0;
     bool game_finished = false;
-    struct Score score;
-    int cpu_direction = 0;
-
     int theory_board[MAX][MAX];
-
-    struct Player player[2] = {
-        {GREEN_LEAF, TURNS_PER_PLAYER, 1, false, false}, 
-        {RED_LEAF, TURNS_PER_PLAYER, 0, false, true}
-    };
-
     int player_num = 0;
     bool move_made = false;
+    
+    struct Score score;
+    struct Final_Move cpu_move;
 
+    struct Player player[2] = {
+        {GREEN_LEAF, TURNS_PER_PLAYER, 1, PLAYER}, 
+        {RED_LEAF, TURNS_PER_PLAYER, 0, CPU_EASY}
+    };
 
     while (!WindowShouldClose()) {
 
         // RESET BOARD
         if (IsKeyPressed(KEY_ONE)) {
-            InitBoard(board, 1);
+            bounds = InitBoard(board, 1);
         }
         if (IsKeyPressed(KEY_TWO)) {
-            InitBoard(board, 2);
+            bounds = InitBoard(board, 2);
         }
         if (IsKeyPressed(KEY_THREE)) {
-            InitBoard(board, 3);
+            bounds = InitBoard(board, 3);
         }
         if (IsKeyPressed(KEY_FOUR)) {
-            InitBoard(board, 4);
+            bounds = InitBoard(board, 4);
         }
 
         if (IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_TWO) || 
             IsKeyPressed(KEY_THREE) || IsKeyPressed(KEY_FOUR)) {
 
-            AddArrows(board, ARROWS_ALL);
+            AddArrows(board, bounds, ARROWS_ALL);
             player[0].moves_remaining = 1;
             player[1].moves_remaining = 0;
             player[0].turns_remaining = TURNS_PER_PLAYER;
@@ -514,11 +523,11 @@ int main(void) {
             ClearBackground(DARKGRAY);
 
             BeginMode2D(camera);
-                int posX = grid_origin.x;
-                int posY = grid_origin.y;
+                int posX = bounds.grid_origin.x;
+                int posY = bounds.grid_origin.y;
                 // Draw board tiles
-                for (int row = row_min - 1; row <= row_max + 1; row++) {
-                    for (int col = col_min - 1; col <= col_max + 1; col++) {
+                for (int row = bounds.row_min - 1; row <= bounds.row_max + 1; row++) {
+                    for (int col = bounds.col_min - 1; col <= bounds.col_max + 1; col++) {
                         switch (board[row][col]) {
                             case GREEN_LEAF:
                                 DrawTexture(green_LEAF_texture, posX, posY, WHITE);
@@ -545,86 +554,76 @@ int main(void) {
                         posX += TILE_SIZE;
                     }
                     posY += TILE_SIZE;
-                    posX = grid_origin.x;
+                    posX = bounds.grid_origin.x;
                 }
 
+                if (player[player_num].cpu_controlled && !game_finished) {
+                    cpu_move = CpuMoves(board, bounds, theory_board, player[player_num].color, head, player[player_num].cpu_controlled);
+                    bounds = GameMove(board, bounds, player[player_num].color, cpu_move.direction, cpu_move.col, cpu_move.row);
 
-                if (player[player_num].CPU_controlled && game_finished == false) {
-                    cpu_direction = CpuMoves(board, theory_board, player[player_num].color, head);
-
-                    switch (cpu_direction) {
+                    switch (cpu_move.direction) {
                         case ARROW_LEFT:
-                            AddArrows(board, ARROW_UP);
+                            AddArrows(board, bounds, ARROW_UP);
                             break;                            
                         case ARROW_RIGHT:
-                            AddArrows(board, ARROW_DOWN);
+                            AddArrows(board, bounds, ARROW_DOWN);
                             break;                        
                         case ARROW_UP:
-                            AddArrows(board, ARROW_RIGHT);
+                            AddArrows(board, bounds, ARROW_RIGHT);
                             break;                        
                         case ARROW_DOWN:
-                            AddArrows(board, ARROW_LEFT);
+                            AddArrows(board, bounds, ARROW_LEFT);
                             break;
                     }
-
                     move_made = true;                    
                 }
 
                 mouse = GetScreenToWorld2D(GetMousePosition(), camera);
                 if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !game_finished) {
-                    selected_col = (mouse.x - grid_origin.x) / TILE_SIZE + col_min - 1;
-                    selected_row = (mouse.y - grid_origin.y) / TILE_SIZE + row_min - 1;  
+                    selected_col = (mouse.x - bounds.grid_origin.x) / TILE_SIZE + bounds.col_min - 1;
+                    selected_row = (mouse.y - bounds.grid_origin.y) / TILE_SIZE + bounds.row_min - 1;  
 
                     int selected_square = board[selected_row][selected_col];
 
                     switch (selected_square) {
                         case ARROW_LEFT:
-                            GameMove(board, player[player_num].color, ARROW_LEFT, selected_col, selected_row, true);
-                            AddArrows(board, ARROW_UP);
+                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_LEFT, selected_col, selected_row);
+                            AddArrows(board, bounds, ARROW_UP);
                             break;                            
                         case ARROW_RIGHT:
-                            GameMove(board, player[player_num].color, ARROW_RIGHT, selected_col, selected_row, true);
-                            AddArrows(board, ARROW_DOWN);
+                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_RIGHT, selected_col, selected_row);
+                            AddArrows(board, bounds, ARROW_DOWN);
                             break;                        
                         case ARROW_UP:
-                            GameMove(board, player[player_num].color, ARROW_UP, selected_col, selected_row, true);
-                            AddArrows(board, ARROW_RIGHT);
+                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_UP, selected_col, selected_row);
+                            AddArrows(board, bounds, ARROW_RIGHT);
                             break;                        
                         case ARROW_DOWN:
-                            GameMove(board, player[player_num].color, ARROW_DOWN, selected_col, selected_row, true);
-                            AddArrows(board, ARROW_LEFT);
+                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_DOWN, selected_col, selected_row);
+                            AddArrows(board, bounds, ARROW_LEFT);
                             break;
                     }
 
                     if (selected_square == ARROW_LEFT || selected_square == ARROW_RIGHT || 
                         selected_square == ARROW_UP || selected_square == ARROW_DOWN) {
-
-                        move_made = true;
+                            move_made = true;
                     }
                 }
                 
-
                 if (move_made) {
                     player[player_num].moves_remaining--;
                     player[player_num].turns_remaining--;
-                    score = CheckScore(board);
+                    score = CheckScore(board, bounds);
 
-                    if (player[player_num].turns_remaining > 0 && player[player_num].moves_remaining == 0) {
+                    if (player[player_num].moves_remaining == 0) {
                         player_num = (player_num + 1) % (sizeof(player) / sizeof(player[0]));
                         player[player_num].moves_remaining = 2;
-                        AddArrows(board, ARROWS_ALL);
+                        AddArrows(board, bounds, ARROWS_ALL);
                     }
-                    
-                    if (player[player_num].turns_remaining == 0) {
-                        if (player[player_num].color == RED_LEAF) {
-                            player_num = 0;
-                            player[player_num].moves_remaining = 1;
-                            AddArrows(board, ARROWS_ALL);
-                        }
-                        else {
-                            game_finished = true;
-                            AddArrows(board, ARROWS_NONE);
-                        }
+   
+                    if (player[0].turns_remaining == 0 && player[1].turns_remaining == 0) {
+                        game_finished = true;
+                        AddArrows(board, bounds, ARROWS_NONE);
                     }
 
                     move_made = false;
@@ -633,24 +632,20 @@ int main(void) {
             EndMode2D();
 
             if (game_finished) {
+                if (score.green > score.red)
+                    DrawText(TextFormat("ZALIAS LAIMI"), 20, 20, 40, GREEN);
+                else if (score.green < score.red)
+                    DrawText(TextFormat("RAUDONAS LAIMI"), 20, 20, 40, RED);
+                else
+                    DrawText(TextFormat("LYGIOSIOS"), 20, 20, 40, YELLOW);
 
-                    if (score.green > score.red)
-                        DrawText(TextFormat("ZALIAS LAIMI"), 20, 20, 40, GREEN);
-                    else if (score.green < score.red)
-                        DrawText(TextFormat("RAUDONAS LAIMI"), 20, 20, 40, RED);
-                    else
-                        DrawText(TextFormat("LYGIOSIOS"), 20, 20, 40, YELLOW);
-
-                    DrawText(TextFormat("   %d", score.green), 20, 60, 50, GREEN);
-                    DrawText(TextFormat("     -"), 20, 60, 50, WHITE);
-                    DrawText(TextFormat("       %d", score.red), 20, 60, 50, RED);
+                DrawText(TextFormat("   %d", score.green), 20, 60, 50, GREEN);
+                DrawText(TextFormat("     -"), 20, 60, 50, WHITE);
+                DrawText(TextFormat("       %d", score.red), 20, 60, 50, RED);
             }
-
         EndDrawing();
     }
-
     CloseWindow();
-
 
     return 0;
 }
