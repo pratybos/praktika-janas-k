@@ -42,7 +42,20 @@ struct Player {
     enum CpuControlled {PLAYER, CPU_EASY, CPU_MEDIUM} cpu_controlled;
 };
 
-struct Board_Bounds InitBoard(int arr[MAX][MAX], int type) {
+struct Animation {
+    float push_offset;
+    Vector2 push_direction;
+    Color tile_tint;
+};
+
+typedef enum {
+    STATE_IDLE,
+    STATE_MADE_MOVE,
+    STATE_ANIMATING,
+    STATE_POST_ANIMATION
+} TileState;
+
+struct Board_Bounds InitBoard(int arr[MAX][MAX], int type, struct Animation animation[MAX][MAX]) {
     struct Board_Bounds bounds;
 
     for (int row = 0; row < MAX; row++) {
@@ -130,6 +143,12 @@ struct Board_Bounds InitBoard(int arr[MAX][MAX], int type) {
     bounds.grid_origin.x = (SCREEN_WIDTH - grid_width) / 2;
     bounds.grid_origin.y = (SCREEN_HEIGHT - grid_height) / 2;
 
+    for (int row = 0; row < MAX; row++) {
+        for (int col = 0; col < MAX; col++) {
+            animation[row][col].tile_tint = WHITE;
+        }
+    }
+
     return bounds;
 }
 
@@ -162,7 +181,7 @@ void AddArrows(int arr[MAX][MAX], struct Board_Bounds bounds, int mode) {
         }        
 }
 
-struct Board_Bounds GameMove(int arr[MAX][MAX], struct Board_Bounds bounds, int turn_color, int direction, int col, int row) {
+struct Board_Bounds GameMove(int arr[MAX][MAX], struct Board_Bounds bounds, int turn_color, int direction, int col, int row, struct Animation animation[MAX][MAX], bool animate) {
     // Tile pushing based on direction
     int i, j;
     switch (direction) {
@@ -181,10 +200,21 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Board_Bounds bounds, int 
                 bounds.grid_origin.x -= TILE_SIZE;
             }
 
-            for (; j <= i; j++)
+            for (; j <= i; j++) {
+                if (animate) {
+                    animation[row][j].push_offset = TILE_SIZE;
+                    animation[row][j].push_direction.x = 1;
+                    animation[row][j].push_direction.y = 0;
+                }
                 arr[row][j] = arr[row][j + 1];
+            }
             
             arr[row][i] = turn_color;
+            if (animate) {
+                animation[row][i].push_offset = TILE_SIZE;
+                animation[row][i].push_direction.x = 1;
+                animation[row][i].push_direction.y = 0;
+            }
             break;
 
         case ARROW_RIGHT:
@@ -200,10 +230,21 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Board_Bounds bounds, int 
                 bounds.col_max++;
             }
 
-            for (; j >= i; j--)
+            for (; j >= i; j--) {
+                if (animate) {
+                    animation[row][j].push_offset = TILE_SIZE;
+                    animation[row][j].push_direction.x = -1;
+                    animation[row][j].push_direction.y = 0;
+                }
                 arr[row][j] = arr[row][j - 1];
+            }
 
             arr[row][i] = turn_color;
+            if (animate) {
+                animation[row][i].push_offset = TILE_SIZE;
+                animation[row][i].push_direction.x = -1;
+                animation[row][i].push_direction.y = 0;
+            }
             break;
             
         case ARROW_UP:
@@ -220,10 +261,21 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Board_Bounds bounds, int 
                 bounds.grid_origin.y -= TILE_SIZE;
             }
 
-            for (; j <= i; j++)
+            for (; j <= i; j++) {
+                if (animate) {
+                    animation[j][col].push_offset = TILE_SIZE;
+                    animation[j][col].push_direction.x = 0;
+                    animation[j][col].push_direction.y = 1;
+                }
                 arr[j][col]= arr[j + 1][col];
+            }
             
             arr[i][col] = turn_color;
+            if (animate) {
+                animation[i][col].push_offset = TILE_SIZE;
+                animation[i][col].push_direction.x = 0;
+                animation[i][col].push_direction.y = 1;
+            }
             break;
 
         case ARROW_DOWN:
@@ -239,10 +291,21 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Board_Bounds bounds, int 
                 bounds.row_max++;
             }
 
-            for (; j >= i; j--)
+            for (; j >= i; j--) {
                 arr[j][col]= arr[j - 1][col];
+                if (animate) {
+                    animation[j][col].push_offset = TILE_SIZE;
+                    animation[j][col].push_direction.x = 0;
+                    animation[j][col].push_direction.y = -1;
+                }
+            }
             
             arr[i][col] = turn_color;
+            if (animate) {
+                animation[i][col].push_offset = TILE_SIZE;
+                animation[i][col].push_direction.x = 0;
+                animation[i][col].push_direction.y = -1;
+            }
             break;
     }
 
@@ -254,7 +317,7 @@ struct Score {
     int red;
 };
 
-struct Score CheckScore(int arr[MAX][MAX], struct Board_Bounds bounds) {
+struct Score CheckScore(int arr[MAX][MAX], struct Board_Bounds bounds, struct Animation animation[MAX][MAX], bool game_finished) {
 
     struct Score score;
     score.green = 0;
@@ -270,9 +333,12 @@ struct Score CheckScore(int arr[MAX][MAX], struct Board_Bounds bounds) {
                         score.green += 1;
                     else if (arr[row][col] == RED_LEAF)
                         score.red += 1;
-                }
+            }
+            else if (game_finished && arr[row][col] != BRANCH) {
+                animation[row][col].tile_tint = GRAY;
             }
         }
+    }
 
     return score;        
 }
@@ -323,7 +389,7 @@ struct Moves* destroy(struct Moves* head) {
     return NULL;
 }
 
-struct Final_Move CpuMoves(int board[MAX][MAX], struct Board_Bounds bounds, int theory_board[MAX][MAX], int turn_color, struct Moves* head, int cpu_difficulty) { 
+struct Final_Move CpuMoves(int board[MAX][MAX], struct Board_Bounds bounds, int theory_board[MAX][MAX], int turn_color, struct Moves* head, int cpu_difficulty, struct Animation animation[MAX][MAX]) { 
     /*
     1. Trinamas susietas ejimu sarasas (Moves)
     2. Visi galimi ejimai surasomi i susieta sarasa
@@ -360,8 +426,8 @@ struct Final_Move CpuMoves(int board[MAX][MAX], struct Board_Bounds bounds, int 
     int max_score = -TILES_PER_PLAYER;
     while (current != NULL) {
         memcpy(theory_board, board, sizeof(board[0][0]) * MAX * MAX); 
-        GameMove(theory_board, theory_bounds, turn_color, current->direction, current->col, current->row);
-        score_after = CheckScore(theory_board, theory_bounds);
+        GameMove(theory_board, theory_bounds, turn_color, current->direction, current->col, current->row, animation, false);
+        score_after = CheckScore(theory_board, theory_bounds, animation, false);
         if (turn_color == RED_LEAF)
             current->score = score_after.red - score_after.green;
         else
@@ -417,11 +483,19 @@ struct Final_Move CpuMoves(int board[MAX][MAX], struct Board_Bounds bounds, int 
 }
 
 int main(void) {
-    int board[MAX][MAX];       
+    int board[MAX][MAX];      
+    
+    float push_speed = 8.0f;
+    struct Animation animation[MAX][MAX];
+
+    TileState tile_state;
+    float delay_timer = 0.0f;
+    const float DELAY_DURATION = 0.35f;
     
     struct Board_Bounds bounds;
-    bounds = InitBoard(board, 1);
+    bounds = InitBoard(board, 1, animation);
     AddArrows(board, bounds, ARROWS_ALL);
+    tile_state = STATE_IDLE;
 
     // SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Leaves");
@@ -454,10 +528,22 @@ int main(void) {
     ImageRotate(&arrow_image, 90);
     Texture2D arrow_left_texture = LoadTextureFromImage(arrow_image);
 
+    Image arrow_f_image = LoadImage("assets/arrow_f.png");
+    ImageResize(&arrow_f_image, TILE_SIZE, TILE_SIZE);
+
+    Texture2D arrow_f_up_texture = LoadTextureFromImage(arrow_f_image);
+    ImageRotate(&arrow_f_image, 90);
+    Texture2D arrow_f_right_texture = LoadTextureFromImage(arrow_f_image);
+    ImageRotate(&arrow_f_image, 90);
+    Texture2D arrow_f_down_texture = LoadTextureFromImage(arrow_f_image);
+    ImageRotate(&arrow_f_image, 90);
+    Texture2D arrow_f_left_texture = LoadTextureFromImage(arrow_f_image);
+
     Vector2 mouse = { 0, 0 };
 
     int selected_col = 0, selected_row = 0;
     bool game_finished = false;
+    bool color_changed = false;
     int theory_board[MAX][MAX];
     int player_num = 0;
     bool move_made = false;
@@ -467,23 +553,23 @@ int main(void) {
 
     struct Player player[2] = {
         {GREEN_LEAF, TURNS_PER_PLAYER, 1, PLAYER}, 
-        {RED_LEAF, TURNS_PER_PLAYER, 0, CPU_EASY}
+        {RED_LEAF, TURNS_PER_PLAYER, 0, CPU_MEDIUM}
     };
 
     while (!WindowShouldClose()) {
 
         // RESET BOARD
         if (IsKeyPressed(KEY_ONE)) {
-            bounds = InitBoard(board, 1);
+            bounds = InitBoard(board, 1, animation);
         }
         if (IsKeyPressed(KEY_TWO)) {
-            bounds = InitBoard(board, 2);
+            bounds = InitBoard(board, 2, animation);
         }
         if (IsKeyPressed(KEY_THREE)) {
-            bounds = InitBoard(board, 3);
+            bounds = InitBoard(board, 3, animation);
         }
         if (IsKeyPressed(KEY_FOUR)) {
-            bounds = InitBoard(board, 4);
+            bounds = InitBoard(board, 4, animation);
         }
 
         if (IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_TWO) || 
@@ -495,6 +581,7 @@ int main(void) {
             player[0].turns_remaining = TURNS_PER_PLAYER;
             player[1].turns_remaining = TURNS_PER_PLAYER;
             game_finished = false;
+            color_changed = false;
             score.green = 0;
             score.red = 0;
         }
@@ -523,32 +610,61 @@ int main(void) {
             ClearBackground(DARKGRAY);
 
             BeginMode2D(camera);
+                mouse = GetScreenToWorld2D(GetMousePosition(), camera);
+                selected_col = (mouse.x - bounds.grid_origin.x) / TILE_SIZE + bounds.col_min - 1;
+                selected_row = (mouse.y - bounds.grid_origin.y) / TILE_SIZE + bounds.row_min - 1;  
+
                 int posX = bounds.grid_origin.x;
                 int posY = bounds.grid_origin.y;
                 // Draw board tiles
                 for (int row = bounds.row_min - 1; row <= bounds.row_max + 1; row++) {
                     for (int col = bounds.col_min - 1; col <= bounds.col_max + 1; col++) {
+
+                        int anim_posX = posX + animation[row][col].push_offset * animation[row][col].push_direction.x;
+                        int anim_posY = posY + animation[row][col].push_offset * animation[row][col].push_direction.y;
+                        Color tile_color = animation[row][col].tile_tint;
+                        
                         switch (board[row][col]) {
                             case GREEN_LEAF:
-                                DrawTexture(green_LEAF_texture, posX, posY, WHITE);
+                                DrawTexture(green_LEAF_texture, anim_posX, anim_posY, tile_color);
                                 break;
                             case RED_LEAF:
-                                DrawTexture(red_LEAF_texture, posX, posY, WHITE);
+                                DrawTexture(red_LEAF_texture, anim_posX, anim_posY, tile_color);
                                 break;
                             case BRANCH:
-                                DrawTexture(branch_texture, posX, posY, WHITE);
+                                DrawTexture(branch_texture, anim_posX, anim_posY, tile_color);
                                 break;
                             case ARROW_UP:
-                                DrawTexture(arrow_up_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                if (tile_state == STATE_IDLE && !player[player_num].cpu_controlled) {
+                                    if (row == selected_row && col == selected_col)
+                                        DrawTexture(arrow_f_up_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                    else
+                                        DrawTexture(arrow_up_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                }
                                 break;
                             case ARROW_DOWN:
-                                DrawTexture(arrow_down_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                if (tile_state == STATE_IDLE && !player[player_num].cpu_controlled) {
+                                    if (row == selected_row && col == selected_col)
+                                        DrawTexture(arrow_f_down_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                    else
+                                        DrawTexture(arrow_down_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                }
                                 break;    
                             case ARROW_LEFT:
-                                DrawTexture(arrow_left_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                if (tile_state == STATE_IDLE && !player[player_num].cpu_controlled) {
+                                    if (row == selected_row && col == selected_col)
+                                        DrawTexture(arrow_f_left_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                    else
+                                        DrawTexture(arrow_left_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                }
                                 break;  
                             case ARROW_RIGHT:
-                                DrawTexture(arrow_right_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                if (tile_state == STATE_IDLE && !player[player_num].cpu_controlled) {
+                                    if (row == selected_row && col == selected_col)
+                                        DrawTexture(arrow_f_right_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                    else
+                                        DrawTexture(arrow_right_texture, posX, posY, player[player_num].color == GREEN_LEAF ? GREEN : RED);
+                                }
                                 break;                  
                         }
                         posX += TILE_SIZE;
@@ -557,9 +673,9 @@ int main(void) {
                     posX = bounds.grid_origin.x;
                 }
 
-                if (player[player_num].cpu_controlled && !game_finished) {
-                    cpu_move = CpuMoves(board, bounds, theory_board, player[player_num].color, head, player[player_num].cpu_controlled);
-                    bounds = GameMove(board, bounds, player[player_num].color, cpu_move.direction, cpu_move.col, cpu_move.row);
+                if (player[player_num].cpu_controlled && tile_state == STATE_IDLE && !game_finished) {
+                    cpu_move = CpuMoves(board, bounds, theory_board, player[player_num].color, head, player[player_num].cpu_controlled, animation);
+                    bounds = GameMove(board, bounds, player[player_num].color, cpu_move.direction, cpu_move.col, cpu_move.row, animation, true);
 
                     switch (cpu_move.direction) {
                         case ARROW_LEFT:
@@ -575,31 +691,29 @@ int main(void) {
                             AddArrows(board, bounds, ARROW_LEFT);
                             break;
                     }
-                    move_made = true;                    
+                    move_made = true;              
                 }
 
-                mouse = GetScreenToWorld2D(GetMousePosition(), camera);
-                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !game_finished) {
-                    selected_col = (mouse.x - bounds.grid_origin.x) / TILE_SIZE + bounds.col_min - 1;
-                    selected_row = (mouse.y - bounds.grid_origin.y) / TILE_SIZE + bounds.row_min - 1;  
+
+                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && tile_state == STATE_IDLE && !game_finished) {
 
                     int selected_square = board[selected_row][selected_col];
 
                     switch (selected_square) {
                         case ARROW_LEFT:
-                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_LEFT, selected_col, selected_row);
+                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_LEFT, selected_col, selected_row, animation, true);
                             AddArrows(board, bounds, ARROW_UP);
                             break;                            
                         case ARROW_RIGHT:
-                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_RIGHT, selected_col, selected_row);
+                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_RIGHT, selected_col, selected_row, animation, true);
                             AddArrows(board, bounds, ARROW_DOWN);
                             break;                        
                         case ARROW_UP:
-                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_UP, selected_col, selected_row);
+                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_UP, selected_col, selected_row, animation, true);
                             AddArrows(board, bounds, ARROW_RIGHT);
                             break;                        
                         case ARROW_DOWN:
-                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_DOWN, selected_col, selected_row);
+                            bounds = GameMove(board, bounds, player[player_num].color, ARROW_DOWN, selected_col, selected_row, animation, true);
                             AddArrows(board, bounds, ARROW_LEFT);
                             break;
                     }
@@ -613,7 +727,7 @@ int main(void) {
                 if (move_made) {
                     player[player_num].moves_remaining--;
                     player[player_num].turns_remaining--;
-                    score = CheckScore(board, bounds);
+                    score = CheckScore(board, bounds, animation, false);
 
                     if (player[player_num].moves_remaining == 0) {
                         player_num = (player_num + 1) % (sizeof(player) / sizeof(player[0]));
@@ -627,11 +741,50 @@ int main(void) {
                     }
 
                     move_made = false;
+                    tile_state = STATE_MADE_MOVE;
+                    delay_timer = DELAY_DURATION; 
                 }
 
             EndMode2D();
 
+            
+            if (tile_state == STATE_MADE_MOVE) {
+                delay_timer -= GetFrameTime();
+                if (delay_timer <= 0.0f) {
+                    tile_state = STATE_ANIMATING;
+                }
+            }
+
+            if (tile_state == STATE_POST_ANIMATION) {
+                delay_timer -= GetFrameTime();
+                if (delay_timer <= 0.0f) {
+                    tile_state = STATE_IDLE;
+                }
+            }
+            
+
+            if (tile_state == STATE_ANIMATING) {
+                for (int row = bounds.row_min - 1; row <= bounds.row_max + 1; row++) {
+                    for (int col = bounds.col_min - 1; col <= bounds.col_max + 1; col++) {
+                        if (animation[row][col].push_offset > 0) {
+                            animation[row][col].push_offset -= push_speed;
+                            if (animation[row][col].push_offset <= 0) {
+                                animation[row][col].push_offset = 0;
+                                animation[row][col].push_direction.x = 0;
+                                animation[row][col].push_direction.y = 0;
+                                tile_state = STATE_POST_ANIMATION;
+                            }
+                        }
+                    }
+                }
+            }
+
             if (game_finished) {
+                if (tile_state == STATE_POST_ANIMATION && !color_changed) {
+                    CheckScore(board, bounds, animation, true);
+                    color_changed = true;
+                }
+
                 if (score.green > score.red)
                     DrawText(TextFormat("ZALIAS LAIMI"), 20, 20, 40, GREEN);
                 else if (score.green < score.red)
@@ -643,6 +796,7 @@ int main(void) {
                 DrawText(TextFormat("     -"), 20, 60, 50, WHITE);
                 DrawText(TextFormat("       %d", score.red), 20, 60, 50, RED);
             }
+
         EndDrawing();
     }
     CloseWindow();
