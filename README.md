@@ -1,7 +1,8 @@
 # Lapai - abstraktus stalo žaidimas
 ---
-Žaidimas sukurtas remiantis stalo žaidimu:
+Žaidimas sukurtas remiantis stalo žaidimu "Leaves":
 [Original abstract strategy game: Leaves](https://www.youtube.com/watch?v=RQx2V76qQfg)
+
 Žaidimo autorius: IsawU
 
 Žaidimo aprašymas ir taisyklės:
@@ -9,9 +10,9 @@
 
 ---
 ### Naudojamos bibliotekos
-**raylib** 5.5: žaidimo grafikos atvaizdavimui
-**raygui**: meniu navigacijai
-**tinyfiledialogs**: failų peržiūrai ir pasirinkimui
+- **raylib** 5.5: žaidimo grafikos atvaizdavimui
+- **raygui**: meniu navigacijai
+- **tinyfiledialogs**: failų peržiūrai ir pasirinkimui
 
 ### Įgyvendintos funkcijos:
 - Žaidimą galima žaisti prieš žmogų ar kompiuterinį priešininką.
