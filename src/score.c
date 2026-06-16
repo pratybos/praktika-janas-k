@@ -2,7 +2,7 @@
 #include "board.h"
 #include "animation.h"
 
-struct Score CheckScore(int arr[MAX][MAX], bool game_finished) {
+struct Score CheckScore(int arr[MAX][MAX], Score_Action action) {
 
     struct Score score;
     score.green = 0;
@@ -19,7 +19,7 @@ struct Score CheckScore(int arr[MAX][MAX], bool game_finished) {
                     else if (arr[row][col] == RED_LEAF)
                         score.red += 1;
             }
-            else if (game_finished && arr[row][col] != BRANCH) {
+            else if (action == DIM_UNSCORING_TILES && arr[row][col] != BRANCH) {
                 animation[row][col].tile_tint = GRAY;
             }
         }

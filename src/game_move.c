@@ -3,7 +3,7 @@
 #include "board.h"
 #include "animation.h"
 
-struct Board_Bounds GameMove(int arr[MAX][MAX], struct Turn_Move move, bool permanent) {
+struct Board_Bounds GameMove(int arr[MAX][MAX], struct Turn_Move move, Turn_Type mode) {
     // Tile pushing based on direction
     int i, j;
     switch (move.direction) {
@@ -17,13 +17,13 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Turn_Move move, bool perm
             while (arr[move.row][j] == RED_LEAF || arr[move.row][j] == GREEN_LEAF || arr[move.row][j] == BRANCH)
                 j--;
 
-            if (j < bounds.col_min && permanent) {
+            if (j < bounds.col_min && mode == PERMANENT) {
                 bounds.col_min--;
                 bounds.grid_origin.x -= TILE_SIZE;
             }
 
             for (; j <= i; j++) {
-                if (permanent) {
+                if (mode == PERMANENT) {
                     animation[move.row][j].push_offset = TILE_SIZE;
                     animation[move.row][j].push_direction.x = 1;
                     animation[move.row][j].push_direction.y = 0;
@@ -32,7 +32,7 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Turn_Move move, bool perm
             }
             
             arr[move.row][i] = move.color;
-            if (permanent) {
+            if (mode == PERMANENT) {
                 animation[move.row][i].push_offset = TILE_SIZE;
                 animation[move.row][i].push_direction.x = 1;
                 animation[move.row][i].push_direction.y = 0;
@@ -48,12 +48,12 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Turn_Move move, bool perm
             while (arr[move.row][j] == RED_LEAF || arr[move.row][j] == GREEN_LEAF || arr[move.row][j] == BRANCH)
                 j++;
 
-            if (j > bounds.col_max && permanent) {
+            if (j > bounds.col_max && mode == PERMANENT) {
                 bounds.col_max++;
             }
 
             for (; j >= i; j--) {
-                if (permanent) {
+                if (mode == PERMANENT) {
                     animation[move.row][j].push_offset = TILE_SIZE;
                     animation[move.row][j].push_direction.x = -1;
                     animation[move.row][j].push_direction.y = 0;
@@ -62,7 +62,7 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Turn_Move move, bool perm
             }
 
             arr[move.row][i] = move.color;
-            if (permanent) {
+            if (mode == PERMANENT) {
                 animation[move.row][i].push_offset = TILE_SIZE;
                 animation[move.row][i].push_direction.x = -1;
                 animation[move.row][i].push_direction.y = 0;
@@ -78,13 +78,13 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Turn_Move move, bool perm
             while (arr[j][move.col] == RED_LEAF || arr[j][move.col] == GREEN_LEAF || arr[j][move.col]== BRANCH)
                 j--;
 
-            if (j < bounds.row_min && permanent) {
+            if (j < bounds.row_min && mode == PERMANENT) {
                 bounds.row_min--;
                 bounds.grid_origin.y -= TILE_SIZE;
             }
 
             for (; j <= i; j++) {
-                if (permanent) {
+                if (mode == PERMANENT) {
                     animation[j][move.col].push_offset = TILE_SIZE;
                     animation[j][move.col].push_direction.x = 0;
                     animation[j][move.col].push_direction.y = 1;
@@ -93,7 +93,7 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Turn_Move move, bool perm
             }
             
             arr[i][move.col] = move.color;
-            if (permanent) {
+            if (mode == PERMANENT) {
                 animation[i][move.col].push_offset = TILE_SIZE;
                 animation[i][move.col].push_direction.x = 0;
                 animation[i][move.col].push_direction.y = 1;
@@ -109,13 +109,13 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Turn_Move move, bool perm
             while (arr[j][move.col] == RED_LEAF || arr[j][move.col] == GREEN_LEAF || arr[j][move.col]== BRANCH)
                 j++;
 
-            if (j > bounds.row_max && permanent) {
+            if (j > bounds.row_max && mode == PERMANENT) {
                 bounds.row_max++;
             }
 
             for (; j >= i; j--) {
                 arr[j][move.col]= arr[j - 1][move.col];
-                if (permanent) {
+                if (mode == PERMANENT) {
                     animation[j][move.col].push_offset = TILE_SIZE;
                     animation[j][move.col].push_direction.x = 0;
                     animation[j][move.col].push_direction.y = -1;
@@ -123,7 +123,7 @@ struct Board_Bounds GameMove(int arr[MAX][MAX], struct Turn_Move move, bool perm
             }
             
             arr[i][move.col] = move.color;
-            if (permanent) {
+            if (mode == PERMANENT) {
                 animation[i][move.col].push_offset = TILE_SIZE;
                 animation[i][move.col].push_direction.x = 0;
                 animation[i][move.col].push_direction.y = -1;

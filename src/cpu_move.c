@@ -4,6 +4,7 @@
 #include <time.h>
 #include "game_move.h"
 #include "score.h"
+#include "game_settings.h"
 
 struct Moves* InsertToBack(struct Moves* head, int direction, int row, int col) {
     struct Moves* temp = (struct Moves*)MemAlloc(sizeof(struct Moves));
@@ -35,7 +36,7 @@ struct Moves* Destroy_List(struct Moves* head) {
     return NULL;
 }
 
-struct Turn_Move CpuMoves(int board[MAX][MAX], int theory_board[MAX][MAX], int turn_color, struct Moves* head, int cpu_difficulty) { 
+struct Turn_Move CpuMoves(int board[MAX][MAX], int turn_color, struct Moves* head, int cpu_difficulty) { 
     /*
     1. Trinamas susietas ejimu sarasas (Moves)
     2. Visi galimi ejimai surasomi i susieta sarasa
@@ -68,8 +69,10 @@ struct Turn_Move CpuMoves(int board[MAX][MAX], int theory_board[MAX][MAX], int t
     struct Score score_after;
 
     struct Turn_Move test_move;
+
+    int theory_board[MAX][MAX];
     
-    int max_score = -TILES_PER_PLAYER;
+    int max_score = -tile_amount.leaves;
     while (current != NULL) {
         memcpy(theory_board, board, sizeof(board[0][0]) * MAX * MAX); 
 
@@ -78,8 +81,8 @@ struct Turn_Move CpuMoves(int board[MAX][MAX], int theory_board[MAX][MAX], int t
         test_move.direction = current->direction;
         test_move.color = turn_color;
 
-        GameMove(theory_board, test_move, false);
-        score_after = CheckScore(theory_board, false);
+        GameMove(theory_board, test_move, THEORETICAL);
+        score_after = CheckScore(theory_board, CHECK_SCORE);
         if (turn_color == RED_LEAF)
             current->score = score_after.red - score_after.green;
         else
@@ -103,14 +106,13 @@ struct Turn_Move CpuMoves(int board[MAX][MAX], int theory_board[MAX][MAX], int t
                 MemFree(current);
                 current = head;
                 prev = head;
-                list_length--;
             }
             else {
                 prev->next = current->next;
                 MemFree(current);
                 current = prev->next;
-                list_length--;
             }
+            list_length--;
         }
         else {
             prev = current;

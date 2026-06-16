@@ -11,7 +11,16 @@ struct Board_Bounds {
     Vector2 grid_origin;
 };
 
+typedef enum {
+    VERTICAL,
+    HORIZONTAL,
+    PLUS,
+    U,
+    RANDOM
+} Start_Positions;
+
 extern struct Board_Bounds bounds;
 
-struct Board_Bounds InitBoard(int arr[MAX][MAX], int type);
+
+struct Board_Bounds InitBoard(int arr[MAX][MAX], Start_Positions type);
 void AddArrows(int arr[MAX][MAX], int mode);

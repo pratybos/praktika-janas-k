@@ -1,6 +1,5 @@
 #pragma once
 
-#include "raylib.h"
 #include "defines.h"
 
 struct Score {
@@ -8,4 +7,9 @@ struct Score {
     int red;
 };
 
-struct Score CheckScore(int arr[MAX][MAX], bool game_finished);
+typedef enum {
+    CHECK_SCORE,
+    DIM_UNSCORING_TILES
+} Score_Action;
+
+struct Score CheckScore(int arr[MAX][MAX], Score_Action game_finished);

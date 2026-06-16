@@ -2,10 +2,20 @@
 #include "defines.h"
 #include "board.h"
 #include "animation.h"
+#include "game_settings.h"
 
-struct Board_Bounds InitBoard(int arr[MAX][MAX], int type) {
+// void ZeroingBoard(int arr[MAX][MAX]) {
+//     for (int row = 0; row < MAX; row++) {
+//         for (int col = 0; col < MAX; col++) {
+//             arr[row][col] = 0;
+//         }
+//     }
+// }
+
+struct Board_Bounds InitBoard(int arr[MAX][MAX], Start_Positions type) {
     struct Board_Bounds bounds;
 
+    // ZeroingBoard(arr);
     for (int row = 0; row < MAX; row++) {
         for (int col = 0; col < MAX; col++) {
             arr[row][col] = 0;
@@ -14,10 +24,10 @@ struct Board_Bounds InitBoard(int arr[MAX][MAX], int type) {
     bounds.row_min = bounds.row_max = bounds.col_min = bounds.col_max = CENTER;
 
     switch (type) {
-        case 1:
+        case VERTICAL:
             // Vertical line start
-            bounds.row_min = CENTER - BRANCH_AMOUNT / 2;
-            bounds.row_max = CENTER + BRANCH_AMOUNT / 2;
+            bounds.row_min = CENTER - tile_amount.branches / 2;
+            bounds.row_max = CENTER + tile_amount.branches / 2;
             bounds.col_min = bounds.col_max = CENTER;  
 
             for (int i = bounds.row_min; i <= bounds.row_max; i++) {
@@ -25,10 +35,10 @@ struct Board_Bounds InitBoard(int arr[MAX][MAX], int type) {
             }
             break;
 
-        case 2:
+        case HORIZONTAL:
             // Horizontal start
-            bounds.col_min = CENTER - BRANCH_AMOUNT / 2;
-            bounds.col_max = CENTER + BRANCH_AMOUNT / 2;
+            bounds.col_min = CENTER - tile_amount.branches / 2;
+            bounds.col_max = CENTER + tile_amount.branches / 2;
             bounds.row_min = bounds.row_max = CENTER;  
 
             for (int i = bounds.col_min; i <= bounds.col_max; i++) {
@@ -36,10 +46,54 @@ struct Board_Bounds InitBoard(int arr[MAX][MAX], int type) {
             }
             break;
 
-        case 3:
+        case RANDOM:
+            // Horizontal start
+            arr[CENTER][CENTER] = 3;
+            int row = CENTER, col = CENTER;
+            for (int i = 1; i < tile_amount.branches; i++) {
+                switch (GetRandomValue(0, 3)) {
+                    case 0:
+                        do {
+                            col -= 1;
+                        } while (arr[row][col] == 3);
+                        arr[row][col] = 3;
+                        if (col < bounds.col_min)
+                            bounds.col_min--;
+                        break;
+
+                    case 1:
+                        do {
+                            col += 1;
+                        } while (arr[row][col] == 3);
+                        arr[row][col] = 3;
+                        if (col > bounds.col_max)
+                            bounds.col_max++;
+                        break;
+                    case 2:
+                        do {
+                            row -= 1;
+                        } while (arr[row][col] == 3);
+                        arr[row][col] = 3;
+                        if (row < bounds.row_min)
+                            bounds.row_min--;
+                        break;
+                    case 3:
+                        do {
+                            row += 1;
+                        } while (arr[row][col] == 3);
+                        arr[row][col] = 3;
+                        if (row > bounds.row_max)
+                            bounds.row_max++;
+                        break;
+                    }
+                        
+                }
+            break;
+
+        case PLUS:
             // Plus start
             arr[CENTER][CENTER] = 3;    // Center
-            for (int i = 1; i < BRANCH_AMOUNT; i++) {
+            for (int i = 1; i < tile_amount.branches; i++) {
                 switch (i % 4) {
                     case 1:         // Left
                         bounds.col_min--;
@@ -61,10 +115,10 @@ struct Board_Bounds InitBoard(int arr[MAX][MAX], int type) {
             }
             break;
 
-        case 4:
-            // V start
+        case U:
+            // U start
             arr[CENTER][CENTER] = 3;    // Center
-            for (int i = 1; i < BRANCH_AMOUNT; i++) {
+            for (int i = 1; i < tile_amount.branches; i++) {
                 switch (i % 4) {
                     case 1:         // Left
                         bounds.col_min--;
@@ -88,7 +142,7 @@ struct Board_Bounds InitBoard(int arr[MAX][MAX], int type) {
 
     int grid_width = (bounds.col_max - bounds.col_min + 3) * TILE_SIZE;
     int grid_height = (bounds.row_max - bounds.row_min + 3) * TILE_SIZE; 
-    bounds.grid_origin.x = (SCREEN_WIDTH - grid_width) / 2;
+    bounds.grid_origin.x = ((SCREEN_WIDTH - SIDEBAR_WIDTH) - grid_width) / 2;
     bounds.grid_origin.y = (SCREEN_HEIGHT - grid_height) / 2;
 
     for (int row = 0; row < MAX; row++) {
